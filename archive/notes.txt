@@ -1,0 +1,174 @@
+The existing PunjabiApp dictionary has several of features already implemented, but more work is needed to make the dictionary more comprehensive and optimized for learning:  https://punjabiapp.com/dictionary (click question mark button for more details)
+
+task: Synonyms and antonyms: Generate a list of synonyms and antonyms for each word entry
+The objective would just be to write an algorithm that takes the CSV file as an input and generate a list of synonyms and antonyms for each word (maybe along with a score)
+
+https://www.holisticseo.digital/python-seo/nltk/wordnet
+
+Parse the CSV: Use Python's CSV module or pandas to read the dictionary file.
+Process Definitions: Extract and analyze the English definitions for each Punjabi word.
+Use WordNet: Use NLTK's WordNet to find synonyms and antonyms for the English words in the definitions.
+Map Back to Punjabi: Associate the found synonyms and antonyms with the original Punjabi words.
+
+approach can be changed just laying a ground and then rest will just stack up
+
+Create a Gurmukhi-to-English mapping using your dictionary.
+Use an English thesaurus to find synonyms and antonyms.
+Map the English synonyms and antonyms back to Gurmukhi
+
+comma and semicolon splits in definition column
+
+synonyms and antonyms need to be same pos
+
+https://stackoverflow.com/questions/2441361/nlp-any-easy-and-good-methods-to-find-semantic-similarity-between-words
+
+Implement custom field parsing: Create a function to handle fields that may contain commas or semicolons within quotes.
+python
+def parse_field(field):
+    if field.startswith('"') and field.endswith('"'):
+        return field[1:-1].replace('""', '"')
+    return field
+
+
+
+# WordNet uses these POS codes:
+# n: noun
+# v: verb
+# a: adjective
+# r: adverb
+
+if pos:
+    filtered_synsets = []
+    for syn in synsets:
+        if syn.pos() == pos:
+            filtered_synsets.append(syn)
+    synsets = filtered_synsets
+
+
+
+
+
+
+
+
+
+
+
+
+
+    import nltk
+from nltk.corpus import wordnet as wn
+from nltk.corpus import stopwords
+import pandas as pd
+import re
+from typing import List, Set
+
+# Download required NLTK data (run once)
+# nltk.download('stopwords')
+# nltk.download('wordnet')
+
+def clean_definition(text: str) -> str:
+    """
+    Clean and standardize definition text.
+    """
+    text = re.sub(r'\([^)]*\)', '', text)
+    text = text.replace(',', ';')
+    text = ' '.join(text.split())
+    return text.lower()
+
+def get_synonyms(definition: str, pos: str = None) -> Set[str]:
+    """
+    Get WordNet synonyms filtered by part of speech.
+    
+    Args:
+        definition (str): Clean definition text
+        pos (str): Part of speech filter ('n' for noun, 'v' for verb, 
+                  'a' for adjective, 'r' for adverb)
+    """
+    # Get English stopwords
+    stop_words = set(stopwords.words('english'))
+    
+    # Split definition and remove stopwords
+    words = definition.split()
+    words = [word for word in words if word not in stop_words]
+    
+    synonyms = set()
+    for word in words:
+        # Get all synsets (synonym sets) for the word
+        synsets = wn.synsets(word)
+        
+        # Filter by part of speech if specified
+        if pos:
+            synsets = [syn for syn in synsets if syn.pos() == pos]
+            
+        # Get all lemmas (word forms) from the synsets
+        for synset in synsets:
+            for lemma in synset.lemmas():
+                synonyms.add(lemma.name())
+    
+    return synonyms
+
+def find_possible_synonyms(df: pd.DataFrame, synonyms: Set[str], pos: str = None) -> List[str]:
+    """
+    Find possible Gurmukhi synonyms.
+    
+    Args:
+        df: Dictionary DataFrame
+        synonyms: Set of English synonyms
+        pos: Part of speech to filter by
+    """
+    possible_synonyms = []
+    
+    for synonym in synonyms:
+        # Find matches in definitions
+        matching_rows = df[df['definition'].str.contains(synonym, case=False)]
+        
+        # Filter by part of speech if specified
+        if pos:
+            matching_rows = matching_rows[matching_rows['pos'].str.startswith(pos)]
+        
+        if not matching_rows.empty:
+            gurmukhi_words = matching_rows['word'].values
+            possible_synonyms.extend(gurmukhi_words)
+    
+    # Return unique synonyms, limited to top 5
+    return list(dict.fromkeys(possible_synonyms))[:5]
+
+def main():
+    df = pd.read_csv('punjabi_university_dictionary.csv')
+    
+    gurmukhi_word = input("Enter a gurmukhi word: ")
+    row = df[df['word'] == gurmukhi_word]
+    
+    if not row.empty:
+        definition = row['definition'].values[0]
+        pos = row['pos'].values[0]
+        
+        print(f"\nDefinition of {gurmukhi_word}: {definition}")
+        
+        # Clean definition
+        clean_def = clean_definition(definition)
+        
+        # Map dictionary POS to WordNet POS codes
+        pos_map = {
+            'noun': 'n',
+            'verb': 'v',
+            'adjective': 'a',
+            'adverb': 'r'
+        }
+        pos_code = next((v for k, v in pos_map.items() if k in pos.lower()), None)
+        
+        # Get and filter synonyms
+        synonyms = get_synonyms(clean_def, pos_code)
+        matches = find_possible_synonyms(df, synonyms, pos_code)
+        
+        print(f"\nSynonyms of {gurmukhi_word}:")
+        for i, match in enumerate(matches, 1):
+            match_def = df[df['word'] == match]['definition'].values[0]
+            print(f"Syn {i}: {match}")
+            print(f"Definition: {match_def}\n")
+    else:
+        print(f"The word '{gurmukhi_word}' was not found in the dictionary.")
+
+if __name__ == "__main__":
+    main()
